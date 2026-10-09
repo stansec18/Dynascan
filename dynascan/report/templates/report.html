@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DAST Report - {{ result.target }}</title>
+<style>
+  :root { --bg:#ffffff; --fg:#111827; --muted:#6b7280; --line:#e5e7eb; --card:#f9fafb; --accent:#4f46e5;
+          --critical:#7f1d1d; --high:#dc2626; --medium:#d97706; --low:#2563eb; --info:#6b7280; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f172a; --fg:#e5e7eb; --muted:#94a3b8; --line:#1e293b; --card:#111c33; --accent:#818cf8; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 21px; margin: 44px 0 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 0; }
+  .muted { color: var(--muted); }
+  .meta { display:flex; flex-wrap:wrap; gap:6px 24px; margin:8px 0 20px; color:var(--muted); font-size:14px; }
+  .cards { display:grid; grid-template-columns: repeat(5, 1fr); gap:10px; margin: 16px 0; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; text-align:center; }
+  .card b { display:block; font-size:26px; }
+  .sev { display:inline-block; padding:1px 9px; border-radius:999px; color:#fff; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+  .sev.critical{background:var(--critical)} .sev.high{background:var(--high)} .sev.medium{background:var(--medium)}
+  .sev.low{background:var(--low)} .sev.info{background:var(--info)}
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  .tablewrap { overflow-x:auto; }
+  .tag { display:inline-block; background:var(--card); border:1px solid var(--line); border-radius:6px; padding:0 7px; margin:0 4px 4px 0; font-size:12px; }
+  .finding { border:1px solid var(--line); border-left:5px solid var(--info); border-radius:8px; padding:14px 16px; margin:14px 0; background:var(--card); }
+  .finding.critical{border-left-color:var(--critical)} .finding.high{border-left-color:var(--high)}
+  .finding.medium{border-left-color:var(--medium)} .finding.low{border-left-color:var(--low)}
+  .finding header { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  pre { background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:10px; overflow-x:auto; font-size:12.5px; white-space:pre-wrap; word-break:break-word; margin:6px 0; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:13px; }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:20px; }
+  .bar { height:8px; border-radius:4px; background:var(--line); overflow:hidden; display:flex; }
+  .bar i { display:block; height:100%; }
+  .zero { color:var(--muted); }
+  .risk-Critical{color:var(--critical);font-weight:700} .risk-High{color:var(--high);font-weight:700}
+  .risk-Medium{color:var(--medium);font-weight:700} .risk-Low{color:var(--low);font-weight:700}
+  .note { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 14px; margin:10px 0; font-size:14px; }
+  @media (max-width: 760px) { .cards{grid-template-columns:repeat(2,1fr)} .grid2{grid-template-columns:1fr} }
+  @media print { body{background:#fff;color:#000} .finding{break-inside:avoid} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Dynamic Application Security Test Report</h1>
+<div class="muted">{{ result.target }}</div>
+<div class="meta">
+  <span>Scan mode: <b>{{ result.mode }}</b>{% if result.auth_summary %} ({{ result.auth_summary }}){% endif %}</span>
+  <span>Started: {{ started }}</span>
+  <span>Duration: {{ duration }}s</span>
+  <span>Requests sent: {{ result.requests_made }}</span>
+  <span>Endpoints: {{ result.endpoints|length }}</span>
+  <span>Dynascan {{ version }}</span>
+</div>
+
+<h2 style="border-top:none;margin-top:8px">1. Executive summary</h2>
+<p>Overall risk rating: <span class="risk-{{ overall_risk }}">{{ overall_risk }}</span>.
+   The scan produced <b>{{ total }}</b> finding{{ '' if total == 1 else 's' }}
+   across {{ result.endpoints|length }} discovered endpoints.</p>
+<div class="cards">
+  {% for s in sev_order %}
+  <div class="card"><b style="color:var(--{{ s }})">{{ counts[s] }}</b><span class="muted">{{ s|capitalize }}</span></div>
+  {% endfor %}
+</div>
+{% for n in result.notes %}<div class="note">{{ n }}</div>{% endfor %}
+
+<h2>2. OWASP coverage</h2>
+<p class="muted">Findings mapped to the OWASP Top 10 (2021) for web applications and the OWASP API Security Top 10 (2023).
+Categories showing 0 had no issue detected by the automated checks - several (e.g. insecure design, logging, business-flow abuse) also need manual review.</p>
+<div class="grid2">
+  <div class="tablewrap">
+    <h3 style="margin-bottom:6px">OWASP Top 10 - Web (2021)</h3>
+    <table>
+      <tr><th>Category</th><th>Findings</th><th>Worst</th></tr>
+      {% for r in web_rows %}
+      <tr>
+        <td><b>{{ r.code }}</b> {{ r.name }}</td>
+        <td class="{{ 'zero' if r.count == 0 else '' }}">{{ r.count }}</td>
+        <td>{% if r.worst %}<span class="sev {{ r.worst }}">{{ r.worst }}</span>{% else %}<span class="zero">-</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  <div class="tablewrap">
+    <h3 style="margin-bottom:6px">OWASP API Security Top 10 (2023)</h3>
+    <table>
+      <tr><th>Category</th><th>Findings</th><th>Worst</th></tr>
+      {% for r in api_rows %}
+      <tr>
+        <td><b>{{ r.code }}</b> {{ r.name }}</td>
+        <td class="{{ 'zero' if r.count == 0 else '' }}">{{ r.count }}</td>
+        <td>{% if r.worst %}<span class="sev {{ r.worst }}">{{ r.worst }}</span>{% else %}<span class="zero">-</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+
+<h2>3. Threat model (STRIDE)</h2>
+{% if tm %}
+<p>{{ tm.methodology }}</p>
+<div class="grid2">
+  <div>
+    <h3>Attack surface</h3>
+    <table>
+      {% for k, v in tm.attack_surface.items() %}<tr><td>{{ k|replace('_',' ')|capitalize }}</td><td>{{ v }}</td></tr>{% endfor %}
+    </table>
+    <h3 style="margin-top:16px">Assets at risk</h3>
+    <ul>{% for a in tm.assets %}<li>{{ a }}</li>{% endfor %}</ul>
+  </div>
+  <div>
+    <h3>Entry points</h3>
+    <table>
+      <tr><th>Group</th><th>#</th><th>Examples</th></tr>
+      {% for e in tm.entry_points %}
+      <tr><td>{{ e.name }}</td><td>{{ e.count }}</td><td><code>{{ e.examples|join(', ') }}</code></td></tr>
+      {% endfor %}
+    </table>
+    <h3 style="margin-top:16px">Trust boundaries</h3>
+    <ul>{% for b in tm.trust_boundaries %}<li><b>{{ b.name }}</b> - {{ b.description }}</li>{% endfor %}</ul>
+  </div>
+</div>
+
+<h3 style="margin:22px 0 8px">Data-flow overview</h3>
+<svg viewBox="0 0 900 190" width="100%" role="img" aria-label="Data flow with trust boundaries" style="max-width:900px">
+  <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#6b7280"/></marker></defs>
+  <rect x="10" y="20" width="150" height="150" rx="8" fill="none" stroke="#6b7280" stroke-dasharray="6 4"/>
+  <text x="20" y="38" font-size="11" fill="#6b7280">Untrusted zone</text>
+  <rect x="30" y="60" width="110" height="70" rx="8" fill="#e0e7ff" stroke="#4f46e5"/>
+  <text x="85" y="90" text-anchor="middle" font-size="13" fill="#111827">Browser /</text>
+  <text x="85" y="108" text-anchor="middle" font-size="13" fill="#111827">API client</text>
+  <rect x="250" y="20" width="400" height="150" rx="8" fill="none" stroke="#6b7280" stroke-dasharray="6 4"/>
+  <text x="260" y="38" font-size="11" fill="#6b7280">Application trust boundary</text>
+  <rect x="275" y="60" width="150" height="70" rx="8" fill="#fef3c7" stroke="#d97706"/>
+  <text x="350" y="86" text-anchor="middle" font-size="13" fill="#111827">Web / API</text>
+  <text x="350" y="104" text-anchor="middle" font-size="12" fill="#374151">{{ tm.attack_surface.endpoints }} endpoints · {{ tm.attack_surface.parameters }} params</text>
+  <rect x="500" y="60" width="130" height="70" rx="8" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="565" y="90" text-anchor="middle" font-size="13" fill="#111827">Auth &amp; session</text>
+  <text x="565" y="108" text-anchor="middle" font-size="12" fill="#374151">{{ tm.scan_mode }}</text>
+  <rect x="740" y="60" width="140" height="70" rx="8" fill="#fee2e2" stroke="#dc2626"/>
+  <text x="810" y="90" text-anchor="middle" font-size="13" fill="#111827">Data stores /</text>
+  <text x="810" y="108" text-anchor="middle" font-size="13" fill="#111827">internal services</text>
+  <line x1="140" y1="95" x2="275" y2="95" stroke="#6b7280" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="425" y1="95" x2="500" y2="95" stroke="#6b7280" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="630" y1="95" x2="740" y2="95" stroke="#6b7280" stroke-width="2" marker-end="url(#ar)"/>
+</svg>
+
+<h3 style="margin:22px 0 8px">Identified threats</h3>
+<div class="tablewrap">
+<table>
+  <tr><th>ID</th><th>STRIDE</th><th>Component &amp; threat</th><th>Status</th><th>Risk</th><th>OWASP</th><th>Related findings</th></tr>
+  {% for t in tm.threats %}
+  <tr>
+    <td><b>{{ t.id }}</b></td>
+    <td>{{ t.stride }}</td>
+    <td><b>{{ t.component }}</b><br>{{ t.threat }}<br><span class="muted">Mitigations: {{ t.mitigations|join('; ') }}</span></td>
+    <td>{{ t.status }}</td>
+    <td><span class="risk-{{ t.risk }}">{{ t.risk }}</span><br><span class="muted">L{{ t.likelihood }} × I{{ t.impact }}</span></td>
+    <td>{% for c in t.owasp_web + t.owasp_api %}<span class="tag">{{ c }}</span>{% endfor %}</td>
+    <td>{% for fid in t.findings %}<a href="#f-{{ fid }}">{{ finding_titles.get(fid, fid)|truncate(38) }}</a><br>{% else %}<span class="zero">none</span>{% endfor %}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+{% else %}<p class="muted">No threat model was generated.</p>{% endif %}
+
+<h2>4. Findings ({{ total }})</h2>
+{% for f in findings %}
+<div class="finding {{ f.severity }}" id="f-{{ f.fingerprint }}">
+  <header>
+    <span class="sev {{ f.severity }}">{{ f.severity }}</span>
+    <h3>{{ f.title }}</h3>
+    <span class="tag">confidence: {{ f.confidence }}</span>
+    {% if f.authenticated %}<span class="tag">authenticated scan</span>{% endif %}
+  </header>
+  <p style="margin:8px 0 4px"><code>{{ f.method }} {{ f.url }}</code>{% if f.parameter %} · parameter <code>{{ f.parameter }}</code>{% endif %}</p>
+  <div>
+    {% for c in f.owasp_web %}<span class="tag">Web {{ c }}</span>{% endfor %}
+    {% for c in f.owasp_api %}<span class="tag">API {{ c }}</span>{% endfor %}
+    {% for c in f.cwe %}<span class="tag">{{ c }}{% if cwe_names.get(c) %} · {{ cwe_names[c] }}{% endif %}</span>{% endfor %}
+  </div>
+  <p>{{ f.description }}</p>
+  {% if f.evidence %}<b>Evidence</b><pre>{{ f.evidence }}</pre>{% endif %}
+  {% if f.request %}<details><summary>Request / response excerpt</summary><pre>{{ f.request }}</pre>{% if f.response_snippet %}<pre>{{ f.response_snippet }}</pre>{% endif %}</details>{% endif %}
+  <p><b>Remediation:</b> {{ f.remediation }}</p>
+  {% if f.references %}<p class="muted">{% for r in f.references %}<a href="{{ r }}">{{ r }}</a> {% endfor %}</p>{% endif %}
+</div>
+{% else %}
+<p class="muted">No findings were produced by the enabled checks.</p>
+{% endfor %}
+
+<h2>5. Scope &amp; methodology</h2>
+<ul>
+  <li>Target: <code>{{ result.target }}</code>; scan mode: {{ result.mode }}.</li>
+  <li>Discovery: HTML crawl{% if config.get('openapi') %} and OpenAPI import{% endif %}; {{ result.endpoints|length }} endpoints identified.</li>
+  <li>Checks: passive response analysis, host-level configuration probes and non-destructive active payloads (XSS, SQLi, SSTI, traversal, open redirect, access control).</li>
+  <li>Limitations: automated DAST cannot prove business-logic flaws, multi-user authorisation (BOLA/BFLA) beyond heuristics, SSRF without an out-of-band listener, or logging/monitoring adequacy. Findings with low confidence need manual verification.</li>
+</ul>
+
+<h2>Appendix: discovered endpoints</h2>
+<div class="tablewrap"><table>
+  <tr><th>Method</th><th>URL</th><th>Parameters</th><th>Source</th></tr>
+  {% for e in result.endpoints %}
+  <tr><td>{{ e.method }}</td><td><code>{{ e.url }}</code></td><td>{{ e.params|map(attribute='name')|join(', ') }}</td><td>{{ e.source }}</td></tr>
+  {% endfor %}
+</table></div>
+
+<p class="muted" style="margin-top:40px">Generated {{ generated }} by Dynascan {{ version }}. Use only against systems you are authorised to test.</p>
+</div>
+</body>
+</html>
