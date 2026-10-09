@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
     QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QSpinBox,
     QSplitter, QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser, QVBoxLayout, QWidget,
-    QStackedWidget, QAbstractItemView,
+    QStackedWidget, QAbstractItemView, QScrollArea, QFrame,
 )
 
 from .. import __version__
@@ -28,7 +28,8 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(f"Dynascan {__version__}")
-        self.resize(1180, 780)
+        self.resize(1100, 720)
+        self.setMinimumSize(720, 480)
         self.worker: ScanWorker | None = None
         self.result: ScanResult | None = None
         self.cfg_used: ScanConfig | None = None
@@ -43,7 +44,18 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ setup tab
     def _build_setup(self) -> QWidget:
+        # Outer page = scrollable form + a footer (authorisation + Start) that is always visible,
+        # so the Start button can never be pushed off-screen on small displays.
+        page = QWidget()
+        page_lay = QVBoxLayout(page)
+        page_lay.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        page_lay.addWidget(scroll, 1)
+
         w = QWidget()
+        scroll.setWidget(w)
         lay = QVBoxLayout(w)
 
         tgt = QGroupBox("Target")
@@ -135,15 +147,22 @@ class MainWindow(QMainWindow):
         tf.addRow("Proxy", self.proxy)
         lay.addWidget(tune)
 
+        lay.addStretch(1)
+
+        # ---- pinned footer
+        footer = QWidget()
+        fl = QVBoxLayout(footer)
+        fl.setContentsMargins(12, 6, 12, 10)
         self.authorized = QCheckBox("I confirm I am authorised to security-test this target")
-        lay.addWidget(self.authorized)
         self.start_btn = QPushButton("Start scan")
         self.start_btn.setStyleSheet("padding:10px;font-weight:600;")
         self.start_btn.clicked.connect(self._start)
-        lay.addWidget(self.start_btn)
-        lay.addStretch(1)
+        fl.addWidget(self.authorized)
+        fl.addWidget(self.start_btn)
+        page_lay.addWidget(footer)
+
         self._auth_changed(0)
-        return w
+        return page
 
     def _pick_openapi(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Choose OpenAPI/Swagger file", "", "API specs (*.json *.yaml *.yml)")
